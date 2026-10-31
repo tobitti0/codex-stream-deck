@@ -9,7 +9,7 @@ Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 
 - `origin`: https://github.com/tobitti0/codex-stream-deck.git
 - `upstream`: https://github.com/dazer1234/codex-stream-deck.git
-- Integration branch: `codex/opendeck-base`
+- Integration branch: `future/opendeck-base`
 - Baseline tag: `v0.7.0-tobitti.1`
 - Compatibility fix tag: `v0.7.0-tobitti.2`
 - `main` tracks the existing fork's `origin/main`.
