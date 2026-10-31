@@ -2,7 +2,7 @@
 
 This fork starts at upstream tag `v0.7.0.2`
 (`6d7d14b9c966de305617a43a7ac22c7034ac075e`). The npm version is
-`0.7.0-tobitti.2`; the numeric Stream Deck manifest version is `0.7.0.1002`.
+`0.7.0-tobitti.4`; the numeric Stream Deck manifest version is `0.7.0.1004`.
 Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 
 ## Git layout
@@ -10,6 +10,7 @@ Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 - `origin`: https://github.com/tobitti0/codex-stream-deck.git
 - `upstream`: https://github.com/dazer1234/codex-stream-deck.git
 - Integration branch: `future/opendeck-base`
+- Normal-launch implementation branch: `future/launcher-free-integration`
 - Baseline tag: `v0.7.0-tobitti.1`
 - Compatibility fix tag: `v0.7.0-tobitti.2`
 - `main` tracks the existing fork's `origin/main`.
@@ -55,6 +56,13 @@ Use the newly built launcher when testing this fork.
 
 ## Live validation boundary
 
+The notes below describe the original native baseline. The current macOS
+plugin also supports a separate [normal-launch mode](NORMAL_LAUNCH.md).
+On ChatGPT `26.1027.30824` (22943), its read-only smoke check obtained six
+statuses and weekly account usage with no CDP. The user confirmed that
+MobileDeck agent presses switch to the displayed chat. This is not a claim
+that microphone, approval, or other native controls work in normal-launch mode.
+
 Builds, automated tests, package validation, and release audits do not prove
 live renderer or physical-device compatibility. The installed desktop version
 for this integration is `26.1027.30824` (build `22943`).
@@ -73,8 +81,7 @@ report to `outputs/local-smoke.json`. It sends no agent, approval, or keycap
 commands and does not log task titles or IDs. It fails explicitly when no live
 bridge is available.
 
-The passive watcher never restarts a session automatically. A transport that
-works with ordinary app launches is separate future work.
+The passive watcher never restarts a session automatically.
 
 ## Initial v0.7.0-tobitti.1 validation (2026-10-31)
 

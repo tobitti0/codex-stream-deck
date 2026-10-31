@@ -161,6 +161,16 @@ export function renderFallbackKeycap(keycapId: string, theme: ThemeMode = "light
   </svg>`);
 }
 
+/** Preserve the original key artwork while showing the current transport requirement. */
+export function renderUnavailableAction(image: string, theme: ThemeMode = "dark"): string {
+  const surface = SURFACES[theme];
+  const svg = decodeURIComponent(image.replace(/^data:image\/svg\+xml;charset=utf8,/, ""));
+  return toDataUrl(svg.replace(/<\/svg>\s*$/, `<g data-action-requirement="launcher">
+    <rect x="34" y="116" width="76" height="19" rx="6" fill="${surface.keyBottom}" stroke="${surface.border}"/>
+    <text x="72" y="129" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="${surface.title}">Launcher</text>
+  </g></svg>`));
+}
+
 export function renderHostTargetKey(label: "WIN" | "MAC", health: HostHealthState, theme: ThemeMode = "dark"): string {
   const surface = SURFACES[theme];
   const signal = health === "ready" ? "#35D86B" : health === "degraded" ? SIGNAL_COLORS[theme].input

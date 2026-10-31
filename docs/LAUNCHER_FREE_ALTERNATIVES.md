@@ -5,6 +5,10 @@ ChatGPT desktop app, with the same six task assignments selected in its Micro
 settings. A separate dashboard with its own task ordering is a different
 capability, even if it needs no launcher.
 
+Subsequent scope update: the user accepted a recent-six-chat list as the first
+implementation. That subset is now implemented; see [normal-launch mode](NORMAL_LAUNCH.md).
+The stricter native-assignment findings below remain relevant to full parity.
+
 These projects were inspected, not installed or executed. Their reported
 runtime success is distinguished from our own local compatibility checks.
 

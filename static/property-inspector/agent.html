@@ -14,6 +14,8 @@
   </style>
 </head>
 <body>
+  <label><span>Connection</span><select id="connection-mode" disabled><option value="local-ipc">Normal launch (macOS IPC)</option><option value="native">Launcher / native Micro</option></select></label>
+  <p>On macOS, Normal launch follows the six most recently updated local chats. IPC = live state; H = saved history. Launcher mode follows native Micro settings. Windows uses the native launcher connection.</p>
   <label>
     <span>Context ring</span>
     <input id="show-context-rings" type="checkbox" checked disabled>
@@ -34,9 +36,12 @@
     const showContextRingsInput = document.getElementById("show-context-rings");
     const showProjectNamesInput = document.getElementById("show-project-names");
     const focusCodexOnAgentPressInput = document.getElementById("focus-codex-on-agent-press");
+    const connectionModeInput = document.getElementById("connection-mode");
 
     function renderGlobalSettings() {
       if (!globalSettings) return;
+      connectionModeInput.value = globalSettings.localConnectionMode === "native" ? "native" : "local-ipc";
+      connectionModeInput.disabled = false;
       showContextRingsInput.checked = globalSettings.showContextRings !== false;
       showProjectNamesInput.checked = globalSettings.showProjectNames !== false;
       focusCodexOnAgentPressInput.checked = globalSettings.focusCodexOnAgentPress === true;
@@ -64,6 +69,7 @@
         websocket.send(JSON.stringify({ event: "getGlobalSettings", context: pluginContext }));
       });
       websocket.addEventListener("close", () => {
+        connectionModeInput.disabled = true;
         showContextRingsInput.disabled = true;
         showProjectNamesInput.disabled = true;
         focusCodexOnAgentPressInput.disabled = true;
@@ -79,6 +85,7 @@
     showContextRingsInput.addEventListener("change", (event) => {
       setGlobalSetting("showContextRings", event.target.checked);
     });
+    connectionModeInput.addEventListener("change", (event) => setGlobalSetting("localConnectionMode", event.target.value));
 
     showProjectNamesInput.addEventListener("change", (event) => {
       setGlobalSetting("showProjectNames", event.target.checked);

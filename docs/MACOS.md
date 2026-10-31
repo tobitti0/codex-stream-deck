@@ -2,6 +2,17 @@
 
 This mode runs Stream Deck and Codex on the same Mac. It needs no Windows PC, relay, SSH, Tailscale, or host-target key. The same plugin package used on Windows launches new tasks and agent links locally through macOS.
 
+## Normal launch (default in this fork)
+
+For six recent local chats, live status, chat switching and account usage,
+install the plugin and open ChatGPT normally. No launcher or debugging port is
+needed. In an Agent Display inspector, select **Normal launch / local IPC**
+under the connection setting. See [the setup and capability table](NORMAL_LAUNCH.md).
+
+The instructions below describe the optional **Launcher / native Micro** mode
+for microphone and other native controls. Select that connection mode when
+using them; normal-launch mode intentionally never probes the debug bridge.
+
 ## Optional iPhone Nearby pairing
 
 With the LaunchAgent installed, enable the local iPhone node without restarting
@@ -57,7 +68,11 @@ chmod +x start-codex-deck.sh "Start Codex Deck.command"
 
 `install` copies the watcher runtime into Application Support and installs a per-user LaunchAgent. The watcher never launches or terminates Codex. It preserves normal sessions, app-update replacements, and sessions whose debugging bridge disappears, then reconnects when a healthy bridge becomes available. Previously stored recovery timers cannot authorize an automatic restart.
 
-An ordinary Codex launch without a debugging bridge remains disconnected from the renderer controls. Preserving that session prevents the restart bug; it does not enable the bridge. The full renderer-based controls still require a bridge-enabled launch. A normal-launch transport is separate work. Only the explicit manual `start --restart` path may terminate an existing session.
+An ordinary Codex launch without a debugging bridge remains disconnected from
+the native renderer controls. It can use the separate normal-launch transport
+above for recent chats and usage. Full renderer controls still require a
+bridge-enabled launch. Only the explicit manual `start --restart` path may
+terminate an existing session.
 
 Renderer discovery now includes `app-shared-*` chunks, using the shared event-bus fix from [PR #16](https://github.com/dazer1234/codex-stream-deck/pull/16). This improves discovery once a debugging bridge is available; it does not enable that bridge on an ordinary launch. Discovery-expression checks are automated, but live renderer and physical Stream Deck compatibility still require validation on the target Codex build.
 

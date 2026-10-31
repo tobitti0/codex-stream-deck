@@ -2,10 +2,17 @@
 
 This checkout is the tobitti fork, based on upstream `v0.7.0.2`. See
 [fork notes](docs/FORK.md) for integrated PRs, local builds, and validation.
-Investigation of launcher-free connectivity is documented in
-[local IPC research](docs/LOCAL_IPC_RESEARCH.md).
+The macOS plugin now defaults to a normal-launch connection: six recent local
+chats, live status where available, chat switching, and account usage. See
+[normal-launch setup and limitations](docs/NORMAL_LAUNCH.md). Native Micro
+controls remain available through the launcher connection mode.
 
-Codex Deck brings the Codex Micro control model to an Elgato Stream Deck. It mirrors Codex's six native agent slots and sends Codex's own Micro events for actions, joystick directions, encoder clicks, reasoning effort, and official keycap commands. It does not type text or depend on global hotkeys.
+Codex Deck brings the Codex Micro control model to an Elgato Stream Deck. In
+native mode it mirrors Codex's six native agent slots and sends Micro events
+for actions, joystick directions, encoder clicks, reasoning effort, and
+official keycap commands. The normal-launch macOS mode uses its own recent
+six-chat list; it does not mirror the Micro settings or support those native
+actions yet. Neither mode types text or depends on global hotkeys.
 
 > [!IMPORTANT]
 > This is an independent community project. It is not made, supported, or endorsed by OpenAI or Elgato. It uses undocumented Codex desktop internals and may need an update after a Codex release.
@@ -26,6 +33,9 @@ The same Stream Deck plugin package works in all three modes. Install only the l
 Windows-only and Mac-only mode have no relay, no second computer dependency, and no host badges. Multi-host mode is optional and can be disabled without changing the local bridge on either machine.
 
 ## Features
+
+The following full control set describes native mode. The normal-launch
+macOS subset is listed in [its capability table](docs/NORMAL_LAUNCH.md#capabilities).
 
 - Six dynamic agent keys using the source and assignments selected in **Codex Settings > Codex Micro**.
 - Optional macOS focus on local agent presses, so Codex receives subsequent keyboard shortcuts even when another app was active.

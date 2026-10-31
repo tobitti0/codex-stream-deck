@@ -8,13 +8,13 @@ import {
 } from "./control-target.js";
 import { CodexRelayClient, readRelayClientConfig } from "./codex-relay-client.js";
 import { CodexRelayServer, readRelayServerConfig } from "./codex-relay-server.js";
-import { CodexMicroRendererBridge } from "./codex-micro-renderer-bridge.js";
+import { LocalCodexBridge } from "./local-codex-bridge.js";
 import { getOrCreateHostIdentity } from "./host-identity.js";
 import type { OfficialKeycapId } from "./keycaps.js";
 import { HostActivityIndex, type HostSnapshot, type RelayCommand } from "./relay-protocol.js";
 import {
   renderAgentKey, renderBuiltinKeycap, renderFallbackKeycap, renderHostTargetKey, renderImportedKeycap,
-  renderRateLimitResetKey, renderUsageLimitKey, renderUsageOverviewKey, type BuiltinIconName
+  renderRateLimitResetKey, renderUnavailableAction, renderUsageLimitKey, renderUsageOverviewKey, type BuiltinIconName
 } from "./render.js";
 import { openCodexThread } from "./codex-open.js";
 import { focusCodexApp } from "./codex-focus.js";
@@ -35,6 +35,7 @@ type MicroActionRegistration = { action: KeyAction; slot: MicroActionSlot };
 type UsageLimitRegistration = { action: KeyAction; mode: UsageLimitMode };
 type ActionIdentity = { id: string };
 export type DeckSettings = {
+  localConnectionMode?: "local-ipc" | "native";
   showContextRings?: boolean;
   showProjectNames?: boolean;
   focusCodexOnAgentPress?: boolean;
@@ -45,7 +46,8 @@ const LOCAL_MOBILE_CONFIG = "mobile-local-relay-server.json";
 const RESET_HOLD_MS = 1_200;
 
 export class DeckController {
-  private readonly microBridge = new CodexMicroRendererBridge((message) => streamDeck.logger.info(message));
+  private readonly microBridge = new LocalCodexBridge((message) => streamDeck.logger.info(message),
+    () => { if (!this.stopped && this.localHost) void this.refresh().catch((error) => streamDeck.logger.warn(String(error))); });
   private readonly agents = new Map<string, AgentRegistration>();
   private readonly microActions = new Map<string, MicroActionRegistration>();
   private readonly fixedActions = new Map<string, FixedIconRegistration>();
@@ -90,10 +92,12 @@ export class DeckController {
       this.showContextRings = settings.showContextRings !== false;
       this.showProjectNames = settings.showProjectNames !== false;
       this.focusCodexOnAgentPress = settings.focusCodexOnAgentPress === true;
+      this.microBridge.setConnectionMode(settings.localConnectionMode === "native" ? "native" : "local-ipc");
     } catch (error) {
       streamDeck.logger.warn(`Global settings were unavailable; using defaults: ${String(error)}`);
     }
     this.localHost = await getOrCreateHostIdentity();
+    this.microBridge.start();
     const persistedTarget = await readControlTarget(undefined, this.localHost.platform);
     const relayConfig = await readRelayClientConfig();
     this.targetPlatform = resolveStartupControlTarget(
@@ -196,6 +200,11 @@ export class DeckController {
     if (this.showContextRings === visible) return;
     this.showContextRings = visible;
     void Promise.all([...this.agents.values()].map((registration) => this.renderAgent(registration)));
+  }
+
+  setConnectionMode(mode: "local-ipc" | "native"): void {
+    this.microBridge.setConnectionMode(mode);
+    void this.refresh().catch((error) => streamDeck.logger.warn(String(error)));
   }
 
   setProjectNameVisibility(visible: boolean): void {
@@ -370,6 +379,7 @@ export class DeckController {
       this.lastError = "";
     } catch (error) {
       this.localHealth = { state: "degraded", reason: "local-bridge-unavailable", changedAt: Date.now() };
+      if (this.localSnapshot?.snapshot.statusSource === "local-ipc") this.localSnapshot = undefined;
       const message = String(error);
       if (message !== this.lastError) {
         this.lastError = message;
@@ -440,14 +450,17 @@ export class DeckController {
 
   private async renderAgent({ action, slot }: AgentRegistration): Promise<void> {
     const agent = this.routedSlots[slot];
-    const health = agent ? this.healthForHost(agent.host) : this.targetHealth();
+    const health = agent?.status === "unavailable" || agent?.status === "unknown"
+      ? { state: "degraded" as const, changedAt: Date.now() }
+      : agent ? this.healthForHost(agent.host) : this.targetHealth();
     const unavailableTitle = health.state === "degraded" ? "Signals uncertain"
       : health.state === "offline" ? "Host offline"
         : health.state === "connecting" ? "Connecting" : "Not assigned";
     const title = agent?.title ?? (agent?.threadKey && health.state === "ready" ? "New chat" : unavailableTitle);
     const status = agent ? visualStatusFromMicro(agent.status) : "empty";
     const theme = this.targetSnapshot()?.theme ?? this.localSnapshot?.snapshot.theme ?? "dark";
-    const hostBadge = agent && this.relayClient ? (agent.host.platform === "darwin" ? "M" : "W") : undefined;
+    const hostBadge = agent?.statusOrigin === "ipc" ? "IPC" : agent?.statusOrigin === "history" ? "H"
+      : agent && this.relayClient ? (agent.host.platform === "darwin" ? "M" : "W") : undefined;
     await this.setImage(action, renderAgentKey(
       slot, title, status, agent?.selected ?? false, this.animationFrame, theme, hostBadge,
       health.state, agent?.contextUsedPercent, this.showContextRings,
@@ -471,15 +484,17 @@ export class DeckController {
     const keycapId = snapshot?.layout.slots[slot]?.keycapId;
     if (!keycapId) return;
     const image = await this.keycapImage(keycapId, snapshot?.theme ?? "dark");
-    if (image) await this.setImage(action, image);
+    if (image) await this.setImage(action, snapshot?.statusSource === "local-ipc" ? renderUnavailableAction(image, snapshot.theme) : image);
   }
 
   private async renderFixedAction(registration: FixedIconRegistration): Promise<void> {
     const theme = this.targetSnapshot()?.theme ?? "dark";
+    const unavailable = this.targetSnapshot()?.statusSource === "local-ipc" && !(registration.source.kind === "builtin" && registration.source.name === "home")
+      && !(registration.source.kind === "local" && registration.source.keycapId === "NEW");
     const image = registration.source.kind === "builtin"
       ? renderBuiltinKeycap(registration.source.name, theme)
       : await this.keycapImage(registration.source.keycapId, theme);
-    if (image) await this.setImage(registration.action, image);
+    if (image) await this.setImage(registration.action, unavailable ? renderUnavailableAction(image, theme) : image);
   }
 
   private async renderHostToggle(action: KeyAction): Promise<void> {

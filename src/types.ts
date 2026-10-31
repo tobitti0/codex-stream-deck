@@ -19,6 +19,8 @@ export type MicroAgentSlot = {
   status: string;
   selected: boolean;
   activityAt?: number;
+  /** Live desktop status or persisted history; history never establishes unread state. */
+  statusOrigin?: "ipc" | "history";
   /** True when this host has the backing Codex rollout file for the task. */
   ownedByHost?: boolean;
   /** Percentage of the current model context window consumed by this task. */
@@ -62,6 +64,7 @@ export type UsageSnapshot = {
 };
 
 export type MicroSnapshot = {
+  statusSource?: "local-ipc";
   slots: MicroAgentSlot[];
   /** Task currently open in the Codex renderer, even when it is outside the six native Micro slots. */
   activeThreadKey?: string;
@@ -71,7 +74,7 @@ export type MicroSnapshot = {
   agentSource: "pinned" | "recent" | "priority" | "custom";
   lightingAutoOff: string;
   theme: ThemeMode;
-  /** Account usage read from Codex's authenticated renderer client. */
+  /** Account usage read from the authenticated renderer or bundled app-server. */
   usage?: UsageSnapshot;
   /** Recent local rollout identities used to disambiguate cross-host mirrors. */
   hostSessions?: HostSessionPresence[];

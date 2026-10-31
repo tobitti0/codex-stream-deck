@@ -15,7 +15,8 @@ import {
 
 const controller = new DeckController();
 
-streamDeck.settings.onDidReceiveGlobalSettings<{ showContextRings?: boolean; showProjectNames?: boolean; focusCodexOnAgentPress?: boolean }>((event) => {
+streamDeck.settings.onDidReceiveGlobalSettings<{ localConnectionMode?: "local-ipc" | "native"; showContextRings?: boolean; showProjectNames?: boolean; focusCodexOnAgentPress?: boolean }>((event) => {
+  controller.setConnectionMode(event.settings.localConnectionMode === "native" ? "native" : "local-ipc");
   controller.setContextRingVisibility(event.settings.showContextRings !== false);
   controller.setProjectNameVisibility(event.settings.showProjectNames !== false);
   controller.setFocusCodexOnAgentPress(event.settings.focusCodexOnAgentPress === true);

@@ -6,6 +6,7 @@ import vm from "node:vm";
 type EventHandler = (event: { data?: string; target?: FakeInput }) => void;
 
 class FakeInput {
+  value = "";
   checked = false;
   disabled = true;
   readonly handlers = new Map<string, EventHandler>();
@@ -50,6 +51,7 @@ test("agent property inspector waits for and preserves complete global settings"
   assert.ok(script);
 
   const inputs = new Map([
+    ["connection-mode", new FakeInput()],
     ["show-context-rings", new FakeInput()],
     ["show-project-names", new FakeInput()],
     ["focus-codex-on-agent-press", new FakeInput()]
@@ -72,6 +74,7 @@ test("agent property inspector waits for and preserves complete global settings"
   assert.equal(inputs.get("show-context-rings")?.disabled, true);
   assert.equal(inputs.get("show-project-names")?.disabled, true);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.disabled, true);
+  assert.equal(inputs.get("connection-mode")?.disabled, true);
 
   socket.readyState = FakeWebSocket.OPEN;
   socket.emit("open");
@@ -92,6 +95,7 @@ test("agent property inspector waits for and preserves complete global settings"
   assert.equal(inputs.get("show-project-names")?.checked, true);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.disabled, false);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.checked, false);
+  assert.equal(inputs.get("connection-mode")?.value, "local-ipc");
 
   socket.emit("message", {
     event: "didReceiveGlobalSettings",
@@ -151,7 +155,15 @@ test("agent property inspector waits for and preserves complete global settings"
     }
   });
 
+  const mode = inputs.get("connection-mode")!;
+  mode.value = "native";
+  mode.dispatchChange();
+  assert.deepEqual(JSON.parse(socket.sent.at(-1) ?? "").payload, {
+    showContextRings: false, showProjectNames: false, focusCodexOnAgentPress: false,
+    unrelatedSetting: "preserved", localConnectionMode: "native"
+  });
   socket.emit("close");
+  assert.equal(mode.disabled, true);
   assert.equal(showContextRings.disabled, true);
   assert.equal(showProjectNames.disabled, true);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.disabled, true);
