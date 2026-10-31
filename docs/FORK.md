@@ -2,7 +2,7 @@
 
 This fork starts at upstream tag `v0.7.0.2`
 (`6d7d14b9c966de305617a43a7ac22c7034ac075e`). The npm version is
-`0.7.0-tobitti.1`; the numeric Stream Deck manifest version is `0.7.0.1001`.
+`0.7.0-tobitti.2`; the numeric Stream Deck manifest version is `0.7.0.1002`.
 Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 
 ## Git layout
@@ -11,6 +11,7 @@ Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 - `upstream`: https://github.com/dazer1234/codex-stream-deck.git
 - Integration branch: `codex/opendeck-base`
 - Baseline tag: `v0.7.0-tobitti.1`
+- Compatibility fix tag: `v0.7.0-tobitti.2`
 - `main` tracks the existing fork's `origin/main`.
 
 ## Integrated upstream PRs
@@ -43,7 +44,7 @@ npm run validate
 npm run audit:release
 ./release/codex-deck-launcher-macos/start-codex-deck.sh self-test
 ./release/codex-deck-launcher-macos/start-codex-deck.sh dry-run
-CODEX_DECK_RELEASE_VERSION=0.7.0-tobitti.1 ./scripts/package-macos-release.sh
+CODEX_DECK_RELEASE_VERSION=0.7.0-tobitti.2 ./scripts/package-macos-release.sh
 ```
 
 The plugin is built under `dist/com.simeo.codex-deck.sdPlugin`; the macOS
@@ -75,7 +76,7 @@ bridge is available.
 The passive watcher never restarts a session automatically. A transport that
 works with ordinary app launches is separate future work.
 
-## Initial validation (2026-10-31)
+## Initial v0.7.0-tobitti.1 validation (2026-10-31)
 
 - TypeScript check: passed.
 - Automated tests: 150 passed, one Windows-only PowerShell test skipped.
@@ -100,3 +101,37 @@ works with ordinary app launches is separate future work.
 The fork launcher is also copied to `~/Downloads/codex-deck-launcher-macos-tobitti`.
 The previous OpenDeck plugin, profiles, and settings are backed up under
 `~/Library/Application Support/CodexDeck/backups/<timestamp>/` before installation.
+
+## v0.7.0-tobitti.2 compatibility fix (2026-10-31)
+
+Live testing found that native Micro activation succeeded but six-slot reads
+failed: the app had cleared its Resource Timing entries, leaving the dedicated
+slot-signal module invisible to DOM/resource discovery.
+
+- Inventory loaded scripts using CDP `Debugger.scriptParsed` on connection,
+  then disable that CDP domain again. No pause or breakpoint is used.
+- Keep only allowlisted local Micro/shared renderer modules, with no fixed
+  build hashes, and supply that inventory to snapshot discovery.
+- Prefer the dedicated six-slot resolver module; support the same resolver
+  interface from shared modules when needed.
+- Accept the current host/account-scoped `rate-limit-status` query keys. Use
+  one active populated snapshot; ambiguous accounts remain unavailable.
+- Keep the legacy unscoped usage query compatible.
+- Regression coverage includes empty Resource Timing, both resolver module
+  layouts, scoped usage, pending queries, and ambiguous account data.
+
+Validation on desktop `26.1027.30824` (`22943`):
+
+- TypeScript check passed; 156 tests passed, one Windows-only test skipped.
+- Launcher activation and native HID/joystick handler readiness passed.
+- Three consecutive real snapshots returned six occupied slots, one selected
+  slot, working/idle statuses, the dark theme, and usage data.
+- OpenDeck plugin `0.7.0.1002` registered with local host health `ready`.
+  The installed runtime matches the built artifact. Its UI displays all six
+  task tiles and weekly usage; the current account response contains only the
+  weekly window, so the five-hour key correctly stays unavailable.
+- Approval, rejection, submission, reset-credit consumption, and other task
+  mutations were not exercised by this read-only smoke test.
+
+This restores status/usage acquisition through a launcher-enabled session.
+Normal-launch transport remains separate future work.

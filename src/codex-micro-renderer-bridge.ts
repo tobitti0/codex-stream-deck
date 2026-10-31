@@ -34,6 +34,8 @@ export function selectCodexMainTarget(targets: DebugTarget[]): DebugTarget | und
 
 type CdpResponse = {
   id?: number;
+  method?: string;
+  params?: { url?: string };
   result?: { result?: { value?: unknown; description?: string }; exceptionDetails?: { text?: string; exception?: { description?: string } } };
   error?: { message?: string };
 };
@@ -74,13 +76,22 @@ export const REASONING_ENCODER_KEYS: Record<ReasoningAdjustment, "ENC_CW" | "ENC
   increase: "ENC_CC"
 };
 
-const SNAPSHOT_EXPRESSION = `(async () => {
+export function isMicroRendererModule(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "app:" && parsed.host === "-" && !parsed.search && !parsed.hash &&
+      /^\/assets\/(?:app-(?:shared|initial|primary)|codex-micro|vscode-api|persisted-signal|settings|artifact-tab-content)-[^/]+\.js$/.test(parsed.pathname);
+  } catch { return false; }
+}
+
+export function buildMicroSnapshotExpression(moduleUrls: readonly string[] = []): string {
+  return `(async () => {
   const urls = [...new Set([
+    ...${JSON.stringify(moduleUrls.filter(isMicroRendererModule))},
     ...[...document.querySelectorAll('link[href], script[src]')].map((element) => element.href || element.src),
     ...performance.getEntriesByType('resource').map((entry) => entry.name)
   ])].filter((url) => url.includes('/assets/') && url.endsWith('.js'));
   const slotSignalsUrl = urls.find((url) => url.includes('/assets/codex-micro-slot-signals-'));
-  if (!slotSignalsUrl) throw new Error('Codex Micro slot signals are not loaded.');
 
   const namespaces = [];
   for (const url of urls) {
@@ -104,12 +115,15 @@ const SNAPSHOT_EXPRESSION = `(async () => {
   const reactKey = root && Object.getOwnPropertyNames(root).find((key) => key.startsWith('__reactContainer$'));
   if (!root || !reactKey) throw new Error('Codex React root was not found.');
 
-  const slotSignals = await import(slotSignalsUrl);
-  const resolvers = Object.values(slotSignals).filter((candidate) =>
+  // Prefer the dedicated slot module when present. Also support resolver
+  // exports from shared chunks without relying on a minified export name.
+  const slotSignalValues = slotSignalsUrl ? Object.values(await import(slotSignalsUrl)) : [];
+  const isResolver = (candidate) =>
     candidate && typeof candidate === 'object' &&
     typeof candidate.resolve === 'function' &&
-    typeof candidate.createSubscriberAtom === 'function'
-  );
+    typeof candidate.createSubscriberAtom === 'function';
+  const preferredResolvers = slotSignalValues.filter(isResolver);
+  const resolvers = preferredResolvers.length ? preferredResolvers : exportedValues.filter(isResolver);
   if (resolvers.length === 0) throw new Error('Codex Micro slot resolver was not found.');
 
   let queue = [root[reactKey]];
@@ -263,9 +277,14 @@ const SNAPSHOT_EXPRESSION = `(async () => {
   let usage;
   for (const client of queryClients) {
     try {
-      const query = client.getQueryCache().getAll().find((candidate) =>
-        JSON.stringify(candidate.queryKey) === '["rate-limit-status"]'
+      // Current builds scope usage keys by host/account. Read the single active,
+      // populated query; never pick a stale account snapshot by cache order.
+      const usageQueries = client.getQueryCache().getAll().filter((candidate) =>
+        Array.isArray(candidate.queryKey) && candidate.queryKey[0] === 'rate-limit-status' &&
+        candidate.state?.data?.rate_limit &&
+        (candidate.queryKey.length === 1 || (candidate.getObserversCount?.() ?? 0) > 0)
       );
+      const query = usageQueries.length === 1 ? usageQueries[0] : undefined;
       const refreshKey = Symbol.for('codex-deck-rate-limit-refresh-at');
       const now = Date.now();
       const dataUpdatedAt = Number(query?.state?.dataUpdatedAt) || 0;
@@ -353,6 +372,7 @@ const SNAPSHOT_EXPRESSION = `(async () => {
 
   return { slots, activeThreadKey, activeThreadTitle, layout, agentSource, lightingAutoOff, theme, ...(usage ? { usage } : {}) };
 })()`;
+}
 
 export class CodexMicroRendererBridge {
   private socket?: WebSocket;
@@ -362,13 +382,14 @@ export class CodexMicroRendererBridge {
   private lastSnapshot?: MicroSnapshot;
   private readonly sessionOwnership = new CodexSessionOwnershipIndex();
   private readonly evaluationNamespace = randomUUID();
+  private readonly moduleUrls = new Set<string>();
 
   constructor(private readonly log: (message: string) => void) {}
 
   async refresh(): Promise<MicroSnapshot> {
     try {
       await this.ensureConnected();
-      const nativeSnapshot = await this.evaluate<MicroSnapshot>(SNAPSHOT_EXPRESSION);
+      const nativeSnapshot = await this.evaluate<MicroSnapshot>(buildMicroSnapshotExpression([...this.moduleUrls]));
       const snapshot = await this.sessionOwnership.annotate(nativeSnapshot);
       this.lastSnapshot = snapshot;
       return snapshot;
@@ -669,18 +690,34 @@ export class CodexMicroRendererBridge {
     socket.on("close", () => this.disconnect(socket));
     socket.on("error", () => this.disconnect(socket));
     this.socket = socket;
+    // Resource Timing can be cleared by the desktop app. CDP reports scripts
+    // already loaded before this connection, without relying on timing history
+    // or on version-specific chunk hashes. Disable our Debugger domain again
+    // after the inventory; no pause, breakpoint, or source modification is used.
+    try {
+      await this.request("Debugger.enable", {});
+    } finally {
+      await this.request("Debugger.disable", {}).catch(() => {});
+    }
     this.log(`Native Codex-Micro-Brücke verbunden (Port ${port}, ${target.url}).`);
   }
 
-  private evaluate<T = unknown>(expression: string): Promise<T> {
+  private async evaluate<T = unknown>(expression: string): Promise<T> {
+    // Keep awaited renderer promises reachable until CDP collects the result.
+    const retainedExpression = retainEvaluationPromise(expression, `${this.evaluationNamespace}-${randomUUID()}`);
+    const message = await this.request("Runtime.evaluate", {
+      expression: retainedExpression, awaitPromise: true, returnByValue: true
+    });
+    const result = message.result;
+    if (result?.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Codex-Auswertung fehlgeschlagen.");
+    return result?.result?.value as T;
+  }
+
+  private request(method: string, params: Record<string, unknown>): Promise<CdpResponse> {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Codex-Micro-Brücke ist nicht verbunden."));
     const id = ++this.nextId;
-    // CDP may garbage-collect an awaited Runtime.evaluate promise while a
-    // renderer handler or dynamic import is still pending. Keep the exact
-    // promise reachable from the renderer until after our own timeout.
-    const retainedExpression = retainEvaluationPromise(expression, `${this.evaluationNamespace}-${id}`);
-    return new Promise<T>((resolve, reject) => {
+    return new Promise<CdpResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error("Codex-Runtime-Antwort hat zu lange gedauert."));
@@ -690,12 +727,10 @@ export class CodexMicroRendererBridge {
         reject,
         resolve: (message) => {
           if (message.error) return reject(new Error(message.error.message ?? "Unbekannter CDP-Fehler."));
-          const result = message.result;
-          if (result?.exceptionDetails) return reject(new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Codex-Auswertung fehlgeschlagen."));
-          resolve(result?.result?.value as T);
+          resolve(message);
         }
       });
-      socket.send(JSON.stringify({ id, method: "Runtime.evaluate", params: { expression: retainedExpression, awaitPromise: true, returnByValue: true } }));
+      socket.send(JSON.stringify({ id, method, params }));
     });
   }
 
@@ -703,6 +738,10 @@ export class CodexMicroRendererBridge {
     let message: CdpResponse;
     try { message = JSON.parse(raw) as CdpResponse; }
     catch { return; }
+    if (message.method === "Debugger.scriptParsed" && typeof message.params?.url === "string" &&
+        isMicroRendererModule(message.params.url) && this.moduleUrls.size < 128) {
+      this.moduleUrls.add(message.params.url);
+    }
     if (message.id == null) return;
     const pending = this.pending.get(message.id);
     if (!pending) return;
@@ -721,6 +760,7 @@ export class CodexMicroRendererBridge {
       reject(new Error("Codex-Micro-Brücke wurde getrennt."));
     }
     this.pending.clear();
+    this.moduleUrls.clear();
   }
 }
 
