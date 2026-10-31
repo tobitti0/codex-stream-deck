@@ -54,12 +54,13 @@ export class AppServerCatalog {
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   constructor(private readonly executable?: string, private readonly timeoutMs = 8_000) {}
 
-  async recent(): Promise<CatalogThread[]> {
+  async recent(skipHistoryFor: ReadonlySet<string> = new Set()): Promise<CatalogThread[]> {
     await this.start();
     const value = await this.request("thread/list", { limit: 12, sortKey: "recency_at", sortDirection: "desc",
       archived: false, useStateDbOnly: true, sourceKinds: ["cli", "vscode", "appServer"] });
     const threads = parseCatalog(value);
     await Promise.all(threads.map(async (thread) => {
+      if (skipHistoryFor.has(thread.id)) return;
       try {
         const page = object(await this.request("thread/turns/list", {
           threadId: thread.id, limit: 1, sortDirection: "desc", itemsView: "notLoaded"

@@ -12,18 +12,35 @@ export function encodeIpcFrame(message: ObjectValue): Buffer {
 }
 
 export class IpcFrameDecoder {
-  private buffered = Buffer.alloc(0);
+  private readonly header = Buffer.allocUnsafe(4);
+  private headerUsed = 0;
+  private body?: Buffer;
+  private bodyUsed = 0;
+  allocatedBytes = 0;
+  frames = 0;
+  largestFrame = 0;
   push(chunk: Buffer): ObjectValue[] {
-    this.buffered = Buffer.concat([this.buffered, chunk]);
     const messages: ObjectValue[] = [];
-    while (this.buffered.length >= 4) {
-      const length = this.buffered.readUInt32LE(0);
-      if (length === 0 || length > MAX_FRAME) throw new Error("Invalid IPC frame length");
-      if (this.buffered.length < length + 4) break;
-      const decoded = object(JSON.parse(this.buffered.subarray(4, length + 4).toString("utf8")));
-      this.buffered = this.buffered.subarray(length + 4);
+    let offset = 0;
+    while (offset < chunk.length) {
+      if (!this.body) {
+        const count = Math.min(4 - this.headerUsed, chunk.length - offset);
+        chunk.copy(this.header, this.headerUsed, offset, offset + count); offset += count; this.headerUsed += count;
+        if (this.headerUsed < 4) break;
+        const length = this.header.readUInt32LE(0);
+        if (length === 0 || length > MAX_FRAME) throw new Error("Invalid IPC frame length");
+        // Allocate each frame only once. Repeated Buffer.concat of a fragmented
+        // multi-MB snapshot otherwise copies the growing body quadratically.
+        this.body = Buffer.allocUnsafe(length); this.allocatedBytes += length;
+        this.largestFrame = Math.max(this.largestFrame, length); this.bodyUsed = 0;
+      }
+      const count = Math.min(this.body.length - this.bodyUsed, chunk.length - offset);
+      chunk.copy(this.body, this.bodyUsed, offset, offset + count); offset += count; this.bodyUsed += count;
+      if (this.bodyUsed < this.body.length) continue;
+      const body = this.body; this.body = undefined; this.headerUsed = 0; this.bodyUsed = 0;
+      const decoded = object(JSON.parse(body.toString("utf8")));
       if (!decoded) throw new Error("IPC message must be an object");
-      messages.push(decoded);
+      this.frames++; messages.push(decoded);
     }
     return messages;
   }

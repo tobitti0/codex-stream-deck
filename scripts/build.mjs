@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import "./generate-plugin-icons.mjs";
+import { buildMacControls } from "./build-macos-controls.mjs";
 
 const output = resolve("dist/com.simeo.codex-deck.sdPlugin");
 // Keep the package root itself because Windows may have a directory handle open
@@ -13,6 +14,7 @@ for (const entry of await readdir(output)) {
   await rm(resolve(output, entry), { recursive: true, force: true });
 }
 await mkdir(resolve(output, "bin"), { recursive: true });
+await buildMacControls(resolve(output, "bin"));
 await mkdir(resolve(output, "static/imgs"), { recursive: true });
 await mkdir(resolve(output, "static/property-inspector"), { recursive: true });
 for (const filename of [

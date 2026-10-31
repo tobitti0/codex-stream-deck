@@ -1,5 +1,6 @@
 import streamDeck from "@elgato/streamdeck";
 import { DeckController } from "./controller.js";
+import { openMicrophoneSetup } from "./macos-dictation.js";
 import {
   Agent1, Agent2, Agent3, Agent4, Agent5, Agent6,
   Approve, Back, Decline, Dictation, Fast, Fork, Forward, NewTask,
@@ -14,6 +15,12 @@ import {
 } from "./actions.js";
 
 const controller = new DeckController();
+
+streamDeck.ui.onSendToPlugin((event) => {
+  if (event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) && event.payload.command === "microphone-setup") {
+    void openMicrophoneSetup().catch((error) => streamDeck.logger.error(`Microphone setup failed: ${String(error)}`));
+  }
+});
 
 streamDeck.settings.onDidReceiveGlobalSettings<{ localConnectionMode?: "local-ipc" | "native"; showContextRings?: boolean; showProjectNames?: boolean; focusCodexOnAgentPress?: boolean }>((event) => {
   controller.setConnectionMode(event.settings.localConnectionMode === "native" ? "native" : "local-ipc");

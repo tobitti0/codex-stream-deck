@@ -14,7 +14,7 @@ import type { OfficialKeycapId } from "./keycaps.js";
 import { HostActivityIndex, type HostSnapshot, type RelayCommand } from "./relay-protocol.js";
 import {
   renderAgentKey, renderBuiltinKeycap, renderFallbackKeycap, renderHostTargetKey, renderImportedKeycap,
-  renderRateLimitResetKey, renderUnavailableAction, renderUsageLimitKey, renderUsageOverviewKey, type BuiltinIconName
+  renderRateLimitResetKey, renderUnavailableAction, renderMicrophoneAction, renderUsageLimitKey, renderUsageOverviewKey, type BuiltinIconName
 } from "./render.js";
 import { openCodexThread } from "./codex-open.js";
 import { focusCodexApp } from "./codex-focus.js";
@@ -24,6 +24,7 @@ import type {
   RoutedAgentSlot, UsageLimitMode, UsageWindowKind
 } from "./types.js";
 import { selectAccountUsageSource, selectUsageWindow, type AccountUsageSource } from "./usage.js";
+import { RuntimeMetrics } from "./runtime-metrics.js";
 
 export type FixedIconSource =
   | { kind: "local"; keycapId: string }
@@ -46,6 +47,8 @@ const LOCAL_MOBILE_CONFIG = "mobile-local-relay-server.json";
 const RESET_HOLD_MS = 1_200;
 
 export class DeckController {
+  private readonly metrics = new RuntimeMetrics();
+  private nextMetricsAt = Date.now() + 30_000;
   private readonly microBridge = new LocalCodexBridge((message) => streamDeck.logger.info(message),
     () => { if (!this.stopped && this.localHost) void this.refresh().catch((error) => streamDeck.logger.warn(String(error))); });
   private readonly agents = new Map<string, AgentRegistration>();
@@ -387,6 +390,10 @@ export class DeckController {
       }
     }
     await this.refreshDisplay();
+    if (Date.now() >= this.nextMetricsAt) {
+      this.nextMetricsAt = Date.now() + 30_000;
+      streamDeck.logger.info(`Runtime performance: ${JSON.stringify({ ...this.metrics.sample(), ipc: this.microBridge.ipc.diagnostics() })}`);
+    }
   }
 
   private async refreshDisplay(): Promise<void> {
@@ -484,7 +491,10 @@ export class DeckController {
     const keycapId = snapshot?.layout.slots[slot]?.keycapId;
     if (!keycapId) return;
     const image = await this.keycapImage(keycapId, snapshot?.theme ?? "dark");
-    if (image) await this.setImage(action, snapshot?.statusSource === "local-ipc" ? renderUnavailableAction(image, snapshot.theme) : image);
+    if (image) await this.setImage(action, snapshot?.statusSource === "local-ipc"
+      ? slot === "ACT10_ACT11" ? renderMicrophoneAction(image, snapshot.microphoneState ?? "idle", snapshot.theme)
+        : renderUnavailableAction(image, snapshot.theme)
+      : image);
   }
 
   private async renderFixedAction(registration: FixedIconRegistration): Promise<void> {
@@ -602,6 +612,7 @@ export class DeckController {
   private async setImage(action: KeyAction, image: string): Promise<void> {
     if (this.lastImages.get(action.id) === image) return;
     await Promise.all([action.setImage(image), action.setTitle("")]);
+    this.metrics.imageSent();
     this.lastImages.set(action.id, image);
   }
 
@@ -630,7 +641,7 @@ export class DeckController {
       this.animationFrame = (this.animationFrame + 1) % 12;
       try { await Promise.all([this.renderAnimatedAgents(), this.renderResetHolds()]); }
       finally { this.scheduleAnimation(); }
-    }, 200);
+    }, this.targetSnapshot()?.statusSource === "local-ipc" ? 500 : 200);
   }
 
   private keycapImage(keycapId: string, theme: "light" | "dark"): Promise<string | null> {

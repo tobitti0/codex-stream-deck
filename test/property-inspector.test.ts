@@ -52,6 +52,7 @@ test("agent property inspector waits for and preserves complete global settings"
 
   const inputs = new Map([
     ["connection-mode", new FakeInput()],
+    ["microphone-setup", new FakeInput()],
     ["show-context-rings", new FakeInput()],
     ["show-project-names", new FakeInput()],
     ["focus-codex-on-agent-press", new FakeInput()]
@@ -65,8 +66,8 @@ test("agent property inspector waits for and preserves complete global settings"
   });
 
   const connect = window.connectElgatoStreamDeckSocket as
-    (port: string, uuid: string, registerEvent: string) => void;
-  connect("1234", "plugin-context", "registerPropertyInspector");
+    (port: string, uuid: string, registerEvent: string, info: string, actionInfo: string) => void;
+  connect("1234", "plugin-context", "registerPropertyInspector", "{}", '{"action":"com.simeo.codex-deck.agent-1","context":"agent-key-context"}');
 
   const socket = FakeWebSocket.latest;
   assert.ok(socket);
@@ -74,14 +75,20 @@ test("agent property inspector waits for and preserves complete global settings"
   assert.equal(inputs.get("show-context-rings")?.disabled, true);
   assert.equal(inputs.get("show-project-names")?.disabled, true);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.disabled, true);
+  assert.equal(inputs.get("microphone-setup")?.disabled, true);
   assert.equal(inputs.get("connection-mode")?.disabled, true);
 
   socket.readyState = FakeWebSocket.OPEN;
   socket.emit("open");
+  assert.equal(inputs.get("microphone-setup")?.disabled, false);
   assert.deepEqual(socket.sent.map((message) => JSON.parse(message)), [
     { event: "registerPropertyInspector", uuid: "plugin-context" },
     { event: "getGlobalSettings", context: "plugin-context" }
   ]);
+  inputs.get("microphone-setup")!.handlers.get("click")?.({});
+  assert.deepEqual(JSON.parse(socket.sent.pop()!), {
+    event: "sendToPlugin", action: "com.simeo.codex-deck.agent-1", context: "agent-key-context", payload: { command: "microphone-setup" }
+  });
 
   inputs.get("show-context-rings")?.dispatchChange();
   assert.equal(socket.sent.length, 2);
@@ -167,4 +174,5 @@ test("agent property inspector waits for and preserves complete global settings"
   assert.equal(showContextRings.disabled, true);
   assert.equal(showProjectNames.disabled, true);
   assert.equal(inputs.get("focus-codex-on-agent-press")?.disabled, true);
+  assert.equal(inputs.get("microphone-setup")?.disabled, true);
 });

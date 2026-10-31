@@ -65,6 +65,8 @@ export type UsageSnapshot = {
 
 export type MicroSnapshot = {
   statusSource?: "local-ipc";
+  /** Normal-launch dictation gesture state; recording is shown only after UI confirmation. */
+  microphoneState?: "idle" | "starting" | "recording" | "hands-free" | "stopping" | "permission-required" | "error";
   slots: MicroAgentSlot[];
   /** Task currently open in the Codex renderer, even when it is outside the six native Micro slots. */
   activeThreadKey?: string;

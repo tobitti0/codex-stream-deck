@@ -1,4 +1,4 @@
-import type { AgentVisualStatus, HostHealthState, ThemeMode, UsageWindow, UsageWindowKind } from "./types.js";
+import type { AgentVisualStatus, HostHealthState, MicroSnapshot, ThemeMode, UsageWindow, UsageWindowKind } from "./types.js";
 import { clampPercent, usageLabel } from "./usage.js";
 
 export type BuiltinIconName = "back" | "forward" | "sidebar" | "home" | "navigation";
@@ -168,6 +168,20 @@ export function renderUnavailableAction(image: string, theme: ThemeMode = "dark"
   return toDataUrl(svg.replace(/<\/svg>\s*$/, `<g data-action-requirement="launcher">
     <rect x="34" y="116" width="76" height="19" rx="6" fill="${surface.keyBottom}" stroke="${surface.border}"/>
     <text x="72" y="129" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="${surface.title}">Launcher</text>
+  </g></svg>`));
+}
+
+export function renderMicrophoneAction(image: string, state: NonNullable<MicroSnapshot["microphoneState"]>, theme: ThemeMode = "dark"): string {
+  const surface = SURFACES[theme];
+  const recording = state === "recording" || state === "hands-free";
+  const color = recording ? "#FF4B61" : state === "permission-required" || state === "error" ? "#FF9A3D" : surface.title;
+  const label = state === "idle" ? "AX" : state === "recording" ? "REC" : state === "hands-free" ? "REC · HF"
+    : state === "permission-required" ? "Allow AX" : state === "error" ? "Check app" : "…";
+  const svg = decodeURIComponent(image.replace(/^data:image\/svg\+xml;charset=utf8,/, ""));
+  return toDataUrl(svg.replace(/<\/svg>\s*$/, `<g data-microphone-state="${state}">
+    ${recording ? `<rect x="7" y="7" width="130" height="130" rx="17" fill="none" stroke="${color}" stroke-width="4"/>` : ""}
+    <rect x="34" y="116" width="76" height="19" rx="6" fill="${surface.keyBottom}" stroke="${color}"/>
+    <text x="72" y="129" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="${color}">${label}</text>
   </g></svg>`));
 }
 

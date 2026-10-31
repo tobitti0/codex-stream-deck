@@ -184,3 +184,55 @@ test("explicit probe cannot report another observed chat as success", { skip: pr
     assert.equal(report.ownersFound, 0); assert.equal(report.snapshots, 0); assert.deepEqual(report.observedStatuses, []);
   } finally { await f.close(); }
 });
+
+test("body-only updates advance the revision without triggering display refresh or resnapshot", { skip: process.platform === "win32" }, async () => {
+  let emit!: (p: ObjectValue) => void;
+  let notifications = 0;
+  const f = await fixture((p, send) => {
+    emit = send;
+    if (p.method === "initialize") send(response(p, { clientId: "fixture-client" }));
+    if (p.method === "thread-owner-discovery") send(response(p));
+    if (p.method === "thread-stream-following-changed" && (p.params as ObjectValue).following === true) send(state(id(1), {
+      type: "snapshot", revision: 0, conversationState: { threadRuntimeStatus: { type: "active" } }
+    }));
+  });
+  const client = new DesktopIpcClient(() => { notifications++; }, { socketPath: f.path, retryMs: 20 });
+  client.setTargets([id(1)]); client.start();
+  try {
+    await until(() => client.current(id(1))?.state != null);
+    const before = notifications;
+    for (let n = 1; n <= 50; n++) emit(state(id(1), { type: "patches", baseRevision: n - 1, revision: n, patches: [
+      { op: "add", path: ["turns", 0, "text"], value: "fixture body" }
+    ] }));
+    await until(() => client.current(id(1))?.state?.revision === 50);
+    assert.equal(notifications, before);
+    assert.equal(client.diagnostics().snapshotsRequested, 1);
+    emit(state(id(1), { type: "patches", baseRevision: 50, revision: 51, patches: [
+      { op: "replace", path: ["threadRuntimeStatus"], value: { type: "idle" } }
+    ] }));
+    await until(() => client.current(id(1))?.state?.revision === 51);
+    assert.equal(notifications, before + 1);
+  } finally { client.close(); await f.close(); }
+});
+
+test("excess IPC traffic disconnects with a cooldown and drops potentially stale live status", { skip: process.platform === "win32" }, async () => {
+  let emit!: (p: ObjectValue) => void;
+  const f = await fixture((p, send) => {
+    emit = send;
+    if (p.method === "initialize") send(response(p, { clientId: "fixture-client" }));
+    if (p.method === "thread-owner-discovery") send(response(p));
+    if (p.method === "thread-stream-following-changed" && (p.params as ObjectValue).following === true) send(state(id(1), {
+      type: "snapshot", revision: 0, conversationState: { threadRuntimeStatus: { type: "active" } }
+    }));
+  });
+  const client = new DesktopIpcClient(() => {}, { socketPath: f.path, retryMs: 20, maxWindowBytes: 4096, cooldownMs: 500 });
+  client.setTargets([id(1)]); client.start();
+  try {
+    await until(() => client.current(id(1))?.state != null);
+    emit({ type: "fixture", body: "x".repeat(8192) });
+    await until(() => client.throttled && !client.connected);
+    assert.equal(client.current(id(1))?.state, undefined);
+    assert.equal(client.diagnostics().budgetStops, 1);
+    await until(() => !client.throttled && client.current(id(1))?.state != null);
+  } finally { client.close(); await f.close(); }
+});

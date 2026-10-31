@@ -16,6 +16,7 @@
 <body>
   <label><span>Connection</span><select id="connection-mode" disabled><option value="local-ipc">Normal launch (macOS IPC)</option><option value="native">Launcher / native Micro</option></select></label>
   <p>On macOS, Normal launch follows the six most recently updated local chats. IPC = live state; H = saved history. Launcher mode follows native Micro settings. Windows uses the native launcher connection.</p>
+  <p><button id="microphone-setup" disabled>Microphone setup (macOS)</button><br>Allow Codex Deck Controls in Accessibility once. Hold the mic to talk; release to transcribe. Double-press for hands-free recording, then press again to stop.</p>
   <label>
     <span>Context ring</span>
     <input id="show-context-rings" type="checkbox" checked disabled>
@@ -37,6 +38,9 @@
     const showProjectNamesInput = document.getElementById("show-project-names");
     const focusCodexOnAgentPressInput = document.getElementById("focus-codex-on-agent-press");
     const connectionModeInput = document.getElementById("connection-mode");
+    const microphoneSetupButton = document.getElementById("microphone-setup");
+    let inspectedAction = "";
+    let inspectedContext = "";
 
     function renderGlobalSettings() {
       if (!globalSettings) return;
@@ -61,15 +65,22 @@
       }));
     }
 
-    window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent) => {
+    window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, actionInfo) => {
       pluginContext = uuid;
+      try {
+        const inspected = JSON.parse(actionInfo || "{}");
+        inspectedAction = inspected.action || "";
+        inspectedContext = inspected.context || uuid;
+      } catch { inspectedAction = ""; inspectedContext = ""; }
       websocket = new WebSocket(`ws://127.0.0.1:${port}`);
       websocket.addEventListener("open", () => {
         websocket.send(JSON.stringify({ event: registerEvent, uuid }));
         websocket.send(JSON.stringify({ event: "getGlobalSettings", context: pluginContext }));
+        microphoneSetupButton.disabled = !inspectedAction;
       });
       websocket.addEventListener("close", () => {
         connectionModeInput.disabled = true;
+        microphoneSetupButton.disabled = true;
         showContextRingsInput.disabled = true;
         showProjectNamesInput.disabled = true;
         focusCodexOnAgentPressInput.disabled = true;
@@ -86,6 +97,11 @@
       setGlobalSetting("showContextRings", event.target.checked);
     });
     connectionModeInput.addEventListener("change", (event) => setGlobalSetting("localConnectionMode", event.target.value));
+    microphoneSetupButton.addEventListener("click", () => {
+      if (websocket?.readyState === WebSocket.OPEN && inspectedAction) websocket.send(JSON.stringify({
+        event: "sendToPlugin", action: inspectedAction, context: inspectedContext, payload: { command: "microphone-setup" }
+      }));
+    });
 
     showProjectNamesInput.addEventListener("change", (event) => {
       setGlobalSetting("showProjectNames", event.target.checked);

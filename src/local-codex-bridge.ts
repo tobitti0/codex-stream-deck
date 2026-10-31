@@ -5,9 +5,10 @@ import { DesktopIpcClient, type DesktopIpcOptions } from "./desktop-ipc-client.j
 import { visualStatus } from "./local-ipc-protocol.js";
 import type { MicroActionSlot, MicroDirection, MicroSnapshot, ReasoningAdjustment, UsageSnapshot } from "./types.js";
 import type { OfficialKeycapId } from "./keycaps.js";
+import { MacOsDictation, type DictationDriver } from "./macos-dictation.js";
 
 export type LocalBridgeOptions = DesktopIpcOptions & { cliPath?: string; platform?: string; native?: CodexMicroRendererBridge; preferIpc?: boolean;
-  catalog?: Pick<AppServerCatalog, "recent" | "usage" | "close"> };
+  catalog?: Pick<AppServerCatalog, "recent" | "usage" | "close">; dictationDriver?: DictationDriver };
 
 /** Normal-launch recent local chats, with the existing native bridge kept for launcher sessions. */
 export class LocalCodexBridge {
@@ -15,6 +16,7 @@ export class LocalCodexBridge {
   readonly ipc: DesktopIpcClient;
   private readonly catalog: Pick<AppServerCatalog, "recent" | "usage" | "close">;
   private readonly enabled: boolean;
+  private readonly dictation: MacOsDictation;
   private preferIpc: boolean;
   private threads: CatalogThread[] = [];
   private catalogAt = 0;
@@ -26,27 +28,35 @@ export class LocalCodexBridge {
   private currentSource?: "native" | "local-ipc";
   private stopped = false;
   private changedTimer?: NodeJS.Timeout;
+  private reportedBudgetStops = 0;
   constructor(private readonly log: (message: string) => void, private readonly changed: () => void = () => {}, options: LocalBridgeOptions = {}) {
     this.native = options.native ?? new CodexMicroRendererBridge(log);
     this.enabled = (options.platform ?? process.platform) === "darwin";
     this.preferIpc = options.preferIpc !== false;
     this.catalog = options.catalog ?? new AppServerCatalog(options.cliPath);
     this.ipc = new DesktopIpcClient(() => this.notify(), options);
+    this.dictation = new MacOsDictation(() => this.notify(), log, options.dictationDriver);
   }
   start(): void { if (this.enabled) this.ipc.start(); }
   setConnectionMode(mode: "local-ipc" | "native"): void {
+    if (this.preferIpc && mode === "native") this.dictation.cancel();
     this.preferIpc = mode === "local-ipc";
     if (!this.preferIpc) this.ipc.setTargets([]);
   }
   close(): void {
-    this.stopped = true; clearTimeout(this.changedTimer); this.ipc.close(); this.catalog.close(); this.native.close();
+    this.stopped = true; clearTimeout(this.changedTimer); this.ipc.close(); this.catalog.close(); this.native.close(); this.dictation.close();
   }
   async refresh(): Promise<MicroSnapshot> {
     if (this.stopped) throw new Error("Local bridge stopped.");
     if (!this.enabled || !this.preferIpc) {
       const snapshot = await this.native.refresh(); this.setSource("native"); return snapshot;
     }
-    if (!this.ipc.connected) throw new Error("Waiting for the normally launched ChatGPT desktop IPC.");
+    const stops = this.ipc.diagnostics().budgetStops;
+    if (stops > this.reportedBudgetStops) {
+      this.reportedBudgetStops = stops;
+      this.log("IPC load budget exceeded: using history while the connection cools down for 60 seconds.");
+    }
+    if (!this.ipc.connected && !this.ipc.throttled) throw new Error("Waiting for the normally launched ChatGPT desktop IPC.");
     // Usage has its own cadence: a slow account request must not block live
     // status or recent-chat discovery. Never keep a failed read indefinitely.
     if (Date.now() >= this.nextUsageAttempt && !this.usagePending) {
@@ -57,11 +67,13 @@ export class LocalCodexBridge {
         .finally(() => { if (this.usagePending === pending) this.usagePending = undefined; this.notify(); });
     }
     if (Date.now() >= this.nextCatalogAttempt && !this.catalogPending) {
-      this.nextCatalogAttempt = Date.now() + 5_000;
+      this.nextCatalogAttempt = Date.now() + 10_000;
       const pending = (async () => {
-        const threads = await this.catalog.recent();
+        const live = new Set(this.threads.filter((t) => this.ipc.current(t.id)?.state != null).map((t) => t.id));
+        const threads = await this.catalog.recent(live);
         if (this.stopped) throw new Error("Local bridge stopped.");
-        this.threads = threads; this.catalogAt = Date.now(); this.ipc.setTargets(threads.map((t) => t.id));
+        this.threads = threads; this.catalogAt = Date.now();
+        if (this.preferIpc) this.ipc.setTargets(threads.map((t) => t.id));
       })();
       this.catalogPending = pending;
       void pending.catch(() => {}).finally(() => { if (this.catalogPending === pending) this.catalogPending = undefined; this.notify(); });
@@ -69,10 +81,10 @@ export class LocalCodexBridge {
     // Initial discovery may wait for the catalog; later history I/O must not
     // hold up live IPC patches and animation of the existing six cards.
     if (!this.catalogAt && this.catalogPending) await this.catalogPending;
-    if (!this.catalogAt || Date.now() - this.catalogAt > 15_000) throw new Error("Recent chat catalog is unavailable or stale.");
+    if (!this.catalogAt || Date.now() - this.catalogAt > 30_000) throw new Error("Recent chat catalog is unavailable or stale.");
     this.setSource("local-ipc");
-    return buildLocalSnapshot(this.threads, this.ipc,
-      this.usage && Date.now() - this.usage.observedAt < 60_000 ? this.usage : undefined);
+    return { ...buildLocalSnapshot(this.threads, this.ipc,
+      this.usage && Date.now() - this.usage.observedAt < 60_000 ? this.usage : undefined), microphoneState: this.dictation.state };
   }
   async checkReadCapabilities(): Promise<{ modelSettingsReadable: boolean; accountUsageReadable: boolean }> {
     const live = this.threads.find((t) => this.ipc.current(t.id)?.state != null);
@@ -95,7 +107,10 @@ export class LocalCodexBridge {
   private requireNative(): void {
     if (this.enabled && this.preferIpc) throw new Error("This key is not yet supported by the normal-launch bridge. Use the launcher for native Micro actions.");
   }
-  async sendAction(slot: MicroActionSlot, act: 0 | 1): Promise<void> { this.requireNative(); return this.native.sendAction(slot, act); }
+  async sendAction(slot: MicroActionSlot, act: 0 | 1): Promise<void> {
+    if (this.enabled && this.preferIpc && slot === "ACT10_ACT11") return this.dictation.key(act);
+    this.requireNative(); return this.native.sendAction(slot, act);
+  }
   async sendJoystick(direction: MicroDirection, distance: 0 | 1): Promise<void> { this.requireNative(); return this.native.sendJoystick(direction, distance); }
   async sendEncoder(act: 0 | 1): Promise<void> { this.requireNative(); return this.native.sendEncoder(act); }
   async adjustReasoning(direction: ReasoningAdjustment): Promise<void> { this.requireNative(); return this.native.adjustReasoning(direction); }
@@ -111,7 +126,7 @@ export class LocalCodexBridge {
   }
   private notify(): void {
     if (this.stopped || this.changedTimer) return;
-    this.changedTimer = setTimeout(() => { this.changedTimer = undefined; if (!this.stopped) this.changed(); }, 100);
+    this.changedTimer = setTimeout(() => { this.changedTimer = undefined; if (!this.stopped) this.changed(); }, 250);
   }
 }
 

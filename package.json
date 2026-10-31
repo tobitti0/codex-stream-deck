@@ -1,6 +1,6 @@
 {
   "name": "codex-stream-deck",
-  "version": "0.7.0-tobitti.4",
+  "version": "0.7.0-tobitti.6",
   "private": false,
   "type": "module",
   "description": "Unofficial Codex Micro bridge for Stream Deck on Windows and macOS, with optional multi-host relay",
@@ -20,6 +20,7 @@
     "smoke:relay": "tsx scripts/relay-smoke.ts",
     "smoke:local": "tsx scripts/local-smoke.ts",
     "smoke:normal": "tsx scripts/normal-launch-smoke.ts",
+    "measure:normal": "tsx scripts/measure-normal-load.ts",
     "probe:ipc": "tsx scripts/probe-local-ipc.ts",
     "audit:release": "node scripts/audit-release.mjs",
     "check": "tsc --noEmit",

@@ -19,6 +19,17 @@ test("IPC framing rejects oversized and zero-length headers before waiting for a
   }
 });
 
+test("fragmented large frames allocate only their payload size rather than recopying a growing buffer", () => {
+  const packet = { type: "fixture", body: "x".repeat(1024 * 1024) };
+  const bytes = encodeIpcFrame(packet);
+  const decoder = new IpcFrameDecoder();
+  const received = [];
+  for (let at = 0; at < bytes.length; at += 1024) received.push(...decoder.push(bytes.subarray(at, at + 1024)));
+  assert.deepEqual(received, [packet]);
+  assert.equal(decoder.allocatedBytes, bytes.length - 4);
+  assert.equal(decoder.frames, 1);
+});
+
 test("status projection drops conversation content and follows matching revisions", () => {
   const first = projectStatus(undefined, { type: "snapshot", revision: 3, conversationState: {
     title: "Private title", turns: [{ text: "Private text" }], threadRuntimeStatus: { type: "active", activeFlags: [] }, hasUnreadTurn: false

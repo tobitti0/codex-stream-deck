@@ -5,14 +5,17 @@ This checkout is the tobitti fork, based on upstream `v0.7.0.2`. See
 The macOS plugin now defaults to a normal-launch connection: six recent local
 chats, live status where available, chat switching, and account usage. See
 [normal-launch setup and limitations](docs/NORMAL_LAUNCH.md). Native Micro
-controls remain available through the launcher connection mode.
+controls remain available through the launcher connection mode. Optional
+[normal-launch microphone support](docs/NORMAL_LAUNCH_MICROPHONE.md) is
+implemented through a separate Accessibility helper and awaits live validation.
 
 Codex Deck brings the Codex Micro control model to an Elgato Stream Deck. In
 native mode it mirrors Codex's six native agent slots and sends Micro events
 for actions, joystick directions, encoder clicks, reasoning effort, and
 official keycap commands. The normal-launch macOS mode uses its own recent
 six-chat list; it does not mirror the Micro settings or support those native
-actions yet. Neither mode types text or depends on global hotkeys.
+actions generally yet; microphone support uses an optional Accessibility helper.
+Neither mode types text or depends on global hotkeys.
 
 > [!IMPORTANT]
 > This is an independent community project. It is not made, supported, or endorsed by OpenAI or Elgato. It uses undocumented Codex desktop internals and may need an update after a Codex release.

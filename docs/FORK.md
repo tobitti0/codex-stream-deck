@@ -2,7 +2,7 @@
 
 This fork starts at upstream tag `v0.7.0.2`
 (`6d7d14b9c966de305617a43a7ac22c7034ac075e`). The npm version is
-`0.7.0-tobitti.4`; the numeric Stream Deck manifest version is `0.7.0.1004`.
+`0.7.0-tobitti.6`; the numeric Stream Deck manifest version is `0.7.0.1006`.
 Action UUIDs are preserved so existing OpenDeck profiles remain usable.
 
 ## Git layout
