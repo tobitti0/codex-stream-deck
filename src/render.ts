@@ -41,11 +41,11 @@ const SURFACES: Record<ThemeMode, SurfacePalette> = {
   }
 };
 
-export function renderAgentKey(slot: number, title: string, status: AgentVisualStatus, selected = false, phase = 0, theme: ThemeMode = "light", hostBadge?: string, hostHealth: HostHealthState = "ready", contextUsedPercent?: number, showContextRing = true): string {
-  return toDataUrl(renderAgentSvg(slot, title, status, selected, phase, theme, hostBadge, hostHealth, contextUsedPercent, showContextRing));
+export function renderAgentKey(slot: number, title: string, status: AgentVisualStatus, selected = false, phase = 0, theme: ThemeMode = "light", hostBadge?: string, hostHealth: HostHealthState = "ready", contextUsedPercent?: number, showContextRing = true, projectName?: string): string {
+  return toDataUrl(renderAgentSvg(slot, title, status, selected, phase, theme, hostBadge, hostHealth, contextUsedPercent, showContextRing, projectName));
 }
 
-export function renderAgentSvg(slot: number, title: string, status: AgentVisualStatus, selected = false, phase = 0, theme: ThemeMode = "light", hostBadge?: string, hostHealth: HostHealthState = "ready", contextUsedPercent?: number, showContextRing = true): string {
+export function renderAgentSvg(slot: number, title: string, status: AgentVisualStatus, selected = false, phase = 0, theme: ThemeMode = "light", hostBadge?: string, hostHealth: HostHealthState = "ready", contextUsedPercent?: number, showContextRing = true, projectName?: string): string {
   const surface = SURFACES[theme];
   const color = SIGNAL_COLORS[theme][status];
   const [line1, line2, line3] = splitTitle(title);
@@ -56,6 +56,12 @@ export function renderAgentSvg(slot: number, title: string, status: AgentVisualS
   const glowOpacity = Math.min(1, (status === "empty" ? .12 : status === "idle" ? .18 : status === "thinking" ? .50 + pulse * .16 : status === "input" ? .42 + pulse * .12 : .52) + themeBoost);
   const surfaceOpacity = (status === "empty" ? .04 : status === "idle" ? .06 : status === "thinking" ? .30 + pulse * .12 : status === "input" ? .24 + pulse * .08 : .28) + (theme === "dark" && status !== "empty" ? .06 : 0);
   const statusMark = hostHealth === "ready" ? renderAgentStatusMark(status, glowColor, statusPhase, pulse, theme) : "";
+  // Keep folder labels below PR #10's status, host, and context indicators,
+  // leaving its enlarged three-line task title intact.
+  const compactProject = projectName ? compactProjectName(projectName) : "";
+  const projectMarkup = compactProject
+    ? `<text data-agent-project="${escapeXml(projectName!)}" x="72" y="43" text-anchor="middle" font-family="Bahnschrift, Segoe UI, Arial, sans-serif" font-size="9" font-weight="650" fill="${surface.title}" fill-opacity=".72">${escapeXml(compactProject)}</text>`
+    : "";
   const titleMarkup = line3
     ? `<text x="72" y="62" text-anchor="middle" font-size="${fitTitleFont(line1, 24, 17)}" font-weight="650" letter-spacing=".03" fill="${surface.title}">${escapeXml(line1)}</text><text x="72" y="91" text-anchor="middle" font-size="${fitTitleFont(line2, 24, 17)}" font-weight="650" letter-spacing=".03" fill="${surface.title}">${escapeXml(line2)}</text><text x="72" y="120" text-anchor="middle" font-size="${fitTitleFont(line3, 24, 17)}" font-weight="650" letter-spacing=".03" fill="${surface.title}">${escapeXml(line3)}</text>`
     : line2
@@ -83,6 +89,7 @@ export function renderAgentSvg(slot: number, title: string, status: AgentVisualS
     ${renderHostHealthMark(hostHealth, theme)}
     ${hostHealth === "ready" && status !== "empty" && showContextRing ? renderContextRing(contextUsedPercent, theme, surface) : ""}
     ${hostBadge ? `<g data-agent-host="${escapeXml(hostBadge)}"><rect x="86" y="16" width="20" height="18" rx="7" fill="${surface.title}" fill-opacity=".11"/><text x="96" y="29" text-anchor="middle" font-family="Bahnschrift, Segoe UI, Arial, sans-serif" font-size="11" font-weight="700" fill="${surface.title}" fill-opacity=".82">${escapeXml(hostBadge)}</text></g>` : ""}
+    ${projectMarkup}
     <g font-family="Bahnschrift, Segoe UI Variable Display, Segoe UI, Arial, sans-serif">${titleMarkup}</g>
     ${statusMark}
   </svg>`;
@@ -308,6 +315,12 @@ function fitTitleFont(value: string, maximum: number, minimum = 15.5): string {
     else units += .54;
   }
   return Math.max(minimum, Math.min(maximum, 108 / Math.max(units, 1))).toFixed(2);
+}
+
+function compactProjectName(value: string): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  const characters = Array.from(clean);
+  return characters.length > 9 ? `${characters.slice(0, 8).join("").replace(/[\s_-]+$/, "")}…` : clean;
 }
 
 function renderAgentStatusMark(status: AgentVisualStatus, color: string, phase: number, pulse: number, theme: ThemeMode): string {

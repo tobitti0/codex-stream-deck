@@ -37,6 +37,25 @@ test("agent context ring is bounded and can be hidden globally", () => {
   assert.doesNotMatch(empty, /data-context-used=/);
 });
 
+test("folder labels preserve the enlarged title and status/context/host strip", () => {
+  const svg = renderAgentSvg(0, "Investigate yellow triangle", "thinking", false, 0, "dark", "M", "ready", 84, true, "SEW-360");
+  assert.match(svg, /data-agent-project="SEW-360" x="72" y="43" text-anchor="middle"[^>]*font-size="9"/);
+  assert.match(svg, />SEW-360<\/text>/);
+  assert.match(svg, /data-context-used="84"[\s\S]*cx="116" cy="25"/);
+  assert.match(svg, /data-agent-host="M"/);
+  assert.match(svg, /y="120"[^>]*>triangle<\/text>/);
+
+  const longName = renderAgentSvg(0, "Context test", "thinking", false, 0, "dark", undefined, "ready", 84, true, "codex-stream-deck");
+  assert.match(longName, />codex-st…<\/text>/);
+
+  const withoutRing = renderAgentSvg(0, "Context test", "thinking", false, 0, "dark", undefined, "ready", 84, false, "SEW-360");
+  assert.match(withoutRing, /data-agent-project="SEW-360" x="72" y="43"/);
+  assert.doesNotMatch(withoutRing, /data-context-used=/);
+
+  const withoutProject = renderAgentSvg(0, "Context test", "thinking", false, 0, "dark");
+  assert.doesNotMatch(withoutProject, /data-agent-project=/);
+});
+
 test("agent titles are enlarged and all state indicators occupy the upper-left slot", () => {
   const complete = renderAgentSvg(0, "Review changes", "complete", false, 0, "dark", undefined, "ready", 42, true);
   assert.match(complete, /font-size="26\.00"/);
