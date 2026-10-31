@@ -131,6 +131,62 @@ operations, but that renderer-to-main service is a different interface from
 the desktop Unix-socket router. Finding an internal `getState` method does not
 make it callable through the socket's thread-coordination method registry.
 
+## Normal-launch verification (2026-10-31)
+
+The desktop app was gracefully terminated and opened with `/usr/bin/open -a`,
+without launcher or debug arguments. The new main process had no remote-debugging
+arguments. The first 20-second IPC probe initialized but received no task
+announcements, snapshots, or patches. This is a connection result, not a successful
+task-status result.
+
+After a local chat was active, a separate 12-second probe on that same normally
+launched app found one owner, received one snapshot and seven patches, and observed
+`working`. Model-settings reading also succeeded. No CDP connection was used.
+This proves normal-launch status interoperability for a discovered local chat;
+it does not prove a full task catalog or native Micro assignment discovery.
+
+### Preserve the app's six assignments
+
+The requested behavior is to keep selection and ordering in ChatGPT's Micro
+settings, exactly as with the existing launcher. An alternative list populated
+from the first six IPC announcements does not meet that requirement. No such
+fallback has been installed into OpenDeck. A draft of that approach was removed
+from the production controller before deployment.
+
+The current desktop coordination socket does not expose the inspected
+`CodexMicroHostService` instance. Its `getState`, `updateAgentThreadKeys`, and
+`updateLighting` methods belong to the renderer/main service boundary. They are
+not request handlers on the external thread-coordination socket. A follower
+initialization does not announce a Micro device or enable the native Micro
+runtime.
+
+### Virtual HID feasibility
+
+Apple provides `CoreHID.HIDVirtualDevice` and a virtual-HID entitlement. A minimal
+unprivileged CoreHID creation check on macOS 26.5.2 returned
+`virtualHidCreated=false`. It used an unrelated vendor-defined descriptor and
+vendor ID, sent no input reports, installed no driver, and changed no system
+security settings. This only demonstrates that this local process could not
+create that virtual device; it does not prove that every privileged or entitled
+virtual-HID design is impossible.
+
+The installed app's macOS discovery uses its native HID-topology addon, followed
+by product/usage-page checks and an HID transport connection. Merely setting an
+IPC client type or a persisted "has ever been detected" flag cannot replace this
+path. A virtual Micro implementation would need to pass native discovery and
+support the device RPCs, including lighting initialization and reconnection.
+Neither has been demonstrated here.
+
+There is a second boundary: the inspected device-lighting messages contain a
+numeric slot plus color, brightness, and effects, not the conversation identity
+or title. Even successful virtual-device recognition alone would not establish
+the mapping needed to label OpenDeck's six keys. That metadata path needs a
+separate solution; it must not be inferred by matching statuses or event order.
+
+References: [Apple HIDVirtualDevice](https://developer.apple.com/documentation/corehid/hidvirtualdevice),
+[creating virtual devices](https://developer.apple.com/documentation/corehid/creatingvirtualdevices),
+[virtual-HID entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.hid.virtual.device).
+
 ## Remaining gaps before a launcher-free plugin
 
 | Capability | Finding / next step |
@@ -144,12 +200,11 @@ make it callable through the socket's thread-coordination method registry.
 | Cloud/remote hosts | Probe currently limits discovery to `local`; not validated |
 | Physical-device emulation | Separate, substantially larger approach requiring HID behavior and macOS permission/entitlement investigation; unnecessary for the proven IPC status path |
 
-Recommended first implementation: an opt-in IPC status source for explicitly
-known/discovered local threads, preserving the current CDP integration while
-catalog/slot/action parity is investigated. Then validate after a normal app
-launch, including reconnects, app updates, and revision gaps. Do not present
-partial IPC support as complete Micro parity or silently fabricate six-slot
-assignments from whichever thread events happened to arrive.
+For this fork, an independent discovered-thread list is out of scope: the user
+requires ChatGPT's own six-slot selection. Keep production on the native bridge
+until an authoritative assignment source is demonstrated. IPC status projection
+can then subscribe to those exact identities without inventing assignments.
+Normal-launch full integration remains incomplete.
 
 ## Validation
 
@@ -162,5 +217,6 @@ assignments from whichever thread events happened to arrive.
 - Framing tests cover byte fragmentation, UTF-8, multiple frames, and invalid
   announced lengths. Projection tests cover revision gaps, content exclusion,
   approval/input/error/unloaded states, and unsupported flag-array patches.
-- No normal-launch restart or replacement of the installed OpenDeck plugin
-  was performed for this investigation.
+- Normal-launch restart and IPC status verification were performed as described
+  above. The installed OpenDeck plugin remains unchanged; it still requires the
+  launcher for native assignment/status synchronization.
