@@ -19,6 +19,7 @@
     "qa:local-icons": "tsx scripts/generate-local-icon-qa.ts",
     "smoke:relay": "tsx scripts/relay-smoke.ts",
     "smoke:local": "tsx scripts/local-smoke.ts",
+    "probe:ipc": "tsx scripts/probe-local-ipc.ts",
     "audit:release": "node scripts/audit-release.mjs",
     "check": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
