@@ -1,5 +1,8 @@
 # Codex Deck
 
+This checkout is the tobitti fork, based on upstream `v0.7.0.2`. See
+[fork notes](docs/FORK.md) for integrated PRs, local builds, and validation.
+
 Codex Deck brings the Codex Micro control model to an Elgato Stream Deck. It mirrors Codex's six native agent slots and sends Codex's own Micro events for actions, joystick directions, encoder clicks, reasoning effort, and official keycap commands. It does not type text or depend on global hotkeys.
 
 > [!IMPORTANT]

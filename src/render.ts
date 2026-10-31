@@ -282,33 +282,39 @@ export function escapeXml(value: string): string {
   })[character] ?? character);
 }
 
+const WIDE_GLYPH = /[\u1100-\u11ff\u2e80-\ua4cf\uac00-\ud7af\uf900-\ufaff\ufe10-\ufe6f\uff01-\uff60\uffe0-\uffe6]|\p{Extended_Pictographic}/u;
+
 function splitTitle(value: string): [string, string, string] {
   const clean = value.replace(/\s+/g, " ").trim();
-  if (clean.length <= 10) return [clean, "", ""];
+  // Six full-width glyphs fit the 108px title area at the 17px minimum.
+  const lineLimit = WIDE_GLYPH.test(clean) ? 6 : 10;
+  if (Array.from(clean).length <= lineLimit) return [clean, "", ""];
 
   const lines: string[] = [];
   let remaining = clean;
   while (remaining && lines.length < 3) {
-    if (remaining.length <= 10) {
+    const characters = Array.from(remaining);
+    if (characters.length <= lineLimit) {
       lines.push(remaining);
       remaining = "";
       break;
     }
-    const candidate = remaining.slice(0, 11);
-    const lastSpace = candidate.lastIndexOf(" ");
-    const nextSpace = remaining.indexOf(" ");
-    const breakAt = lastSpace > 0 ? lastSpace : nextSpace > 0 && nextSpace <= 12 ? nextSpace : 10;
-    lines.push(remaining.slice(0, breakAt).trim());
-    remaining = remaining.slice(breakAt).trim();
+    const lastSpace = characters.slice(0, lineLimit + 1).lastIndexOf(" ");
+    const nextSpace = characters.indexOf(" ");
+    const wordLimit = lineLimit === 10 ? 12 : lineLimit;
+    const breakAt = lastSpace > 0 ? lastSpace : nextSpace > 0 && nextSpace <= wordLimit ? nextSpace : lineLimit;
+    lines.push(characters.slice(0, breakAt).join("").trim());
+    remaining = characters.slice(breakAt).join("").trim();
   }
-  if (remaining && lines.length === 3) lines[2] = `${lines[2]!.slice(0, 9)}…`;
+  if (remaining && lines.length === 3) lines[2] = `${Array.from(lines[2]!).slice(0, lineLimit - 1).join("")}…`;
   return [lines[0] ?? "", lines[1] ?? "", lines[2] ?? ""];
 }
 
 function fitTitleFont(value: string, maximum: number, minimum = 15.5): string {
   let units = 0;
   for (const character of value) {
-    if (/\s/.test(character)) units += .32;
+    if (WIDE_GLYPH.test(character)) units += 1;
+    else if (/\s/.test(character)) units += .32;
     else if (/[ilI1.,:;'|!]/.test(character)) units += .3;
     else if (/[MW@%&]/.test(character)) units += .88;
     else if (/[A-ZÄÖÜ]/.test(character)) units += .63;

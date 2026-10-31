@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Codex Deck",
-  "Version": "0.7.0.5",
+  "Version": "0.7.0.1001",
   "Author": "Dazer",
   "Description": "Unofficial Codex Micro bridge for Stream Deck on Windows and macOS, with optional multi-host relay.",
   "UUID": "com.simeo.codex-deck",
@@ -15,7 +15,7 @@
     { "Platform": "windows", "MinimumVersion": "10" },
     { "Platform": "mac", "MinimumVersion": "13" }
   ],
-  "Nodejs": { "Version": "20", "Debug": "enabled" },
+  "Nodejs": { "Version": "20" },
   "ApplicationsToMonitor": { "windows": ["ChatGPT.exe"], "mac": ["com.openai.codex"] },
   "Actions": [
     { "UUID": "com.simeo.codex-deck.agent-1", "Name": "Agent 1", "Tooltip": "Open native Codex Micro agent slot 1.", "Icon": "static/imgs/category-icon", "PropertyInspectorPath": "static/property-inspector/agent.html", "Controllers": ["Keypad"], "States": [{ "Image": "static/imgs/key", "Title": "" }] },

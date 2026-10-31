@@ -102,6 +102,19 @@ test("agent titles wrap before reaching the horizontal key edges", () => {
   assert.doesNotMatch(title, />Building UI<\/text>/);
 });
 
+test("Japanese agent titles fit within the title area at the enlarged font size", () => {
+  const title = "承認待ちのタスクを開く";
+  const svg = renderAgentSvg(0, title, "input", false, 0, "dark");
+  const titleGroup = svg.match(/<g font-family="Bahnschrift, Segoe UI Variable Display, Segoe UI, Arial, sans-serif">([\s\S]*?)<\/g>/)![1]!;
+  const lines = [...titleGroup.matchAll(/<text[^>]*font-size="([\d.]+)"[^>]*>([^<]+)<\/text>/g)];
+  assert.equal(lines.map((line) => line[2]).join(""), title);
+  assert.ok(lines.length >= 2);
+  for (const line of lines) {
+    assert.ok(Array.from(line[2]!).length * Number(line[1]) <= 108.1);
+    assert.ok(Number(line[1]) >= 17);
+  }
+});
+
 test("user-local monochrome SVGs normalize to an off-white dark glyph", () => {
   const input = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h20v20H2z" stroke="#000"/></svg>';
   const output = decodeURIComponent(renderImportedKeycap(input, "dark").replace(/^data:image\/svg\+xml;charset=utf8,/, ""));
