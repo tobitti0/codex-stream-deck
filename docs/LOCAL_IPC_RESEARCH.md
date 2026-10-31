@@ -162,6 +162,13 @@ runtime.
 
 ### Virtual HID feasibility
 
+Follow-up: [the failure and signing investigation](VIRTUAL_HID_FEASIBILITY.md)
+identifies the kernel entitlement rejection and a separate AMFI rejection for an
+ad-hoc signed entitlement claim. It includes a reproducible benign probe and the
+remaining requirements for a profile-authorized native recognition test.
+The [comparison of related implementations](LAUNCHER_FREE_ALTERNATIVES.md) also
+checks ThreadDeck's runtime inspector route against the installed app's fuses.
+
 Apple provides `CoreHID.HIDVirtualDevice` and a virtual-HID entitlement. A minimal
 unprivileged CoreHID creation check on macOS 26.5.2 returned
 `virtualHidCreated=false`. It used an unrelated vendor-defined descriptor and
